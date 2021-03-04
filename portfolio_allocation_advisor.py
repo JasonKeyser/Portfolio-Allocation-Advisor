@@ -6,27 +6,26 @@ from matplotlib import pyplot as plt
 
 def rdata (t, yrs):
     #this grabs the stock price data from the yahoo finance api
-    stock1 = t.upper()
-    stock2 = yf.Ticker(str(stock1))
+    stock2 = yf.Ticker(str(t.upper()))
 
     #formats the date range to grab historical data from yahoofinance api
-    enddate = date.today()
-    begindate = enddate - timedelta(days=364.25*yrs)
+    lastdate = date.today()
+    firstdate = lastdate - timedelta(days=364.25*yrs)
 
-    historical = stock2.history(start=begindate, end=enddate, interval='1d')
+    historical = stock2.history(start=firstdate, end=lastdate, interval='1d')
 
-    adf = historical
-    stock1name = str(stock1)
+    if historical.empty:
+        raise Exception(str(t.upper() + ' is not a valid ticker. Check yahoo finance and run again.'))
+
+    stock1name = str(t.upper())
 
     #renames closing price column for clarity and drops other columns
-    adf = adf.rename(columns = {'Close': stock1name})
-    try:
-        adf = adf.drop(columns= ['Open', 'High', 'Low', 'Stock Splits', 'Volume','Dividends'])
-    except:
-        return None
+    historical = historical.rename(columns = {'Close': stock1name})
+
+    historical = historical.drop(columns= ['Open', 'High', 'Low', 'Stock Splits', 'Volume','Dividends'])
 
     #finds the stock price at business quarter ends for all years specified in yrs
-    cdf = adf[stock1name].resample('BQ').asfreq(fill_value=-1).tail(yrs*4)
+    cdf = historical[stock1name].resample('BQ').asfreq(fill_value=-1).tail(yrs*4)
 
     #occasionally the stock market is closed on business quarter ends. (fill_value = -1 temporarily, see above) On these days the previous closing price is used via following loop
     ic = 0
@@ -34,7 +33,7 @@ def rdata (t, yrs):
         if ic < len(cdf) - 1:
             if price == -1:
                 nominutes = str(cdf.index[ic] - timedelta(days=1))
-                cdf.iloc[ic] = adf.loc[nominutes[:-9], stock1name]
+                cdf.iloc[ic] = historical.loc[nominutes[:-9], stock1name]
                 ic += 1
             else:
                 ic += 1
@@ -43,7 +42,7 @@ def rdata (t, yrs):
 
     #this takes the price data, makes a new data frame with returns data
     i = 0
-    for close in cdf:
+    for _ in cdf:
         ret = (cdf.iloc[min(i + 1, cdf.count() - 1)] / cdf.iloc[i]) - 1 #closing prices are adjusted for stock splits and dividend returns
         if i < 1:
             d = {'Date': cdf.index[i + 1], stock1name: ret}
@@ -117,6 +116,7 @@ if welcome.lower() == 'l':
           "strategy, giving you understanding of where efficiencies can be gained in diversification. The advised allocation is more meaningful for value investing \n"
           "strategies. In the short-term (less than 6 months) assets are more likely to deviate from historical trends. In the long-term, rebalancing of capital \n"
           "is necessary to maintain the advised proportions (also with new data the advised proportions could change).")
+    dyears = 5
 elif welcome.lower() == 'd':
     dyears = int(input('\nHow many years of price data would you like to include in the calculations? '))
 else:
@@ -124,7 +124,7 @@ else:
 
 amountofstocks = int(input('\nType number of assets in portfolio and hit enter '))
 
-for stock in range(amountofstocks):
+for _ in range(amountofstocks):
     stock = input('Type asset ticker name ')
     stocks.append(stock.lower())
 
@@ -139,6 +139,7 @@ for stock in stocks:
         asset2 = rdata(stock, dyears)
         masterframe = masterframe.merge(asset2, on= 'Date')
         masterframe.set_index('Date', inplace = True)
+
 print('\nAsset Returns')
 print(masterframe)
 
